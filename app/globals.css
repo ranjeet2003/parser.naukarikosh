@@ -22,6 +22,7 @@
     --destructive-foreground: 0 0% 98%; /* text for destructive */
     --border: 240 3.7% 15.9%; /* #2F2F2F */
     --input: 240 3.7% 15.9%; /* #2F2F2F */
+    --input-foreground: 0 0% 98%; /* #FFFFFF */
     --ring: 255 100% 75%; /* Use primary for ring */
     --radius: 0.75rem; /* Slightly more rounded for "rounded" feature */
   }
@@ -46,6 +47,7 @@
     --destructive-foreground: 0 0% 98%;
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
+    --input-foreground: 0 0% 98%;
     --ring: 255 100% 75%;
   }
 
