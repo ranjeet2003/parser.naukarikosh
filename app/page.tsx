@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -20,17 +20,13 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Globe } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
-import Header from "@/components/Header";
-
-interface LinkItem {
-  title: string;
-  link: string;
-}
+import Link from "next/link";
 
 const formSchema = z.object({
   url: z.string().url({ message: "Please enter a valid URL." }),
@@ -51,119 +47,61 @@ export default function HomePage() {
   const [saving, setSaving] = useState(false);
   const [savingCategories, setSavingCategories] = useState(false);
 
-  // New states for link processing
-  const [parsedJsonData, setParsedJsonData] = useState<any | null>(null);
-  const [extractedLinks, setExtractedLinks] = useState<LinkItem[]>([]);
-  const [convertingLink, setConvertingLink] = useState<string | null>(null);
-  const [convertedHtmlToJsonResult, setConvertedHtmlToJsonResult] = useState<string | null>(null);
-  const [showConvertedJsonDialog, setShowConvertedJsonDialog] = useState(false);
+  const [files, setFiles] = useState<string[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+  const [deletingFile, setDeletingFile] = useState<string | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  useEffect(() => {
-    if (jsonResult) {
-      try {
-        const parsed = JSON.parse(jsonResult);
-        setParsedJsonData(parsed);
-        setExtractedLinks(extractLinksFromJson(parsed));
-      } catch (e) {
-        console.error("Failed to parse jsonResult:", e);
-        setParsedJsonData(null);
-        setExtractedLinks([]);
-        toast.error("Failed to parse loaded JSON content.");
+  const handleLoadFiles = async () => {
+    setLoadingFiles(true);
+    try {
+      const response = await fetch("/api/list-json-details");
+      if (response.ok) {
+        const data = await response.json();
+        setFiles(data.files);
+      } else {
+        toast.error("Failed to load files");
       }
-    } else {
-      setParsedJsonData(null);
-      setExtractedLinks([]);
+    } catch (error) {
+      toast.error("Error loading files:", {
+        description: (error as Error).message,
+      });
+    } finally {
+      setLoadingFiles(false);
     }
-  }, [jsonResult]);
-
-  const extractLinksFromJson = (data: any): LinkItem[] => {
-    const links: LinkItem[] = [];
-    const visited = new Set();
-
-    const traverse = (obj: any) => {
-      if (!obj || typeof obj !== 'object' || visited.has(obj)) {
-        return;
-      }
-      visited.add(obj);
-
-      for (const key in obj) {
-        if (Object.prototype.hasOwnProperty.call(obj, key)) {
-          const value = obj[key];
-
-          if (typeof value === 'object' && value !== null) {
-            // Check if it's an object with 'link' and 'title'/'text' properties
-            if (
-              (typeof value.link === 'string' && value.link.startsWith('http')) &&
-              (typeof value.title === 'string' || typeof value.text === 'string')
-            ) {
-              links.push({
-                title: value.title || value.text,
-                link: value.link,
-              });
-            }
-             // Check if it's an object with 'url' and 'title'/'text' properties
-            else if (
-              (typeof value.url === 'string' && value.url.startsWith('http')) &&
-              (typeof value.title === 'string' || typeof value.text === 'string')
-            ) {
-              links.push({
-                title: value.title || value.text,
-                link: value.url,
-              });
-            }
-            // If it's an array, iterate through its elements
-            else if (Array.isArray(value)) {
-              value.forEach(item => traverse(item));
-            }
-            // If it's a plain object, recurse
-            else {
-              traverse(value);
-            }
-          }
-        }
-      }
-    };
-    
-    traverse(data);
-    return links;
   };
 
-  const handleConvertLinkHtmlToJson = async (linkUrl: string) => {
-    setConvertingLink(linkUrl);
-    setConvertedHtmlToJsonResult(null);
+  const handleDeleteFile = async (fileName: string) => {
+    setDeletingFile(fileName);
     try {
-      const response = await fetch('/api/html-to-json', {
-        method: 'POST',
+      const response = await fetch("/api/delete-json", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ url: linkUrl }),
+        body: JSON.stringify({ filename: fileName }),
       });
 
-      if (!response.ok) {
+      if (response.ok) {
+        toast.success("File deleted successfully");
+        setFiles(files.filter((file) => file !== fileName));
+      } else {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to convert HTML to JSON.");
+        throw new Error(errorData.error || "Failed to delete file.");
       }
-
-      const data = await response.json();
-      setConvertedHtmlToJsonResult(JSON.stringify(data.data, null, 2));
-      setShowConvertedJsonDialog(true);
-      toast.success("HTML converted to JSON successfully!");
     } catch (err: any) {
-      toast.error("Error converting HTML to JSON", {
+      toast.error("Error deleting file", {
         description: err.message,
       });
     } finally {
-      setConvertingLink(null);
+      setDeletingFile(null);
     }
-  }
-
+  };
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setLoading(true);
     setJsonResult(null);
     setError(null);
-    setConvertedHtmlToJsonResult(null); // Clear previous AI conversion result
 
     try {
       const response = await fetch("/api/parse-url", {
@@ -258,7 +196,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
-      <Header setJsonResult={setJsonResult} jsonResult={jsonResult} />
       <main className="flex flex-col items-center justify-center flex-grow p-4">
         <Toaster />
         <Card className="w-full max-w-2xl shadow-lg rounded-xl border-border animate-fade-in-up">
@@ -269,7 +206,7 @@ export default function HomePage() {
             </CardTitle>
             <p className="text-muted-foreground mt-2">
               Enter a URL to fetch its HTML, convert it to JSON using Gemini AI,
-              and save the result. Or load a JSON file to process links within it.
+              and save the result.
             </p>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -324,7 +261,7 @@ export default function HomePage() {
                 <Textarea
                   readOnly
                   value={jsonResult}
-                  rows={10} // Reduced rows to make space for links
+                  rows={10}
                   className="w-full bg-input border-border text-foreground font-mono resize-y min-h-[150px] focus:ring-primary focus:border-primary transition-all duration-300 ease-in-out"
                 />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -353,71 +290,72 @@ export default function HomePage() {
                 </div>
               </div>
             )}
-
-            {extractedLinks.length > 0 && (
-              <div className="space-y-4 animate-fade-in">
-                <h3 className="text-xl font-semibold text-foreground">
-                  Extracted Links
-                </h3>
-                <ul className="space-y-3">
-                  {extractedLinks.map((item, index) => (
-                    <li
-                      key={index}
-                      className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 border rounded-md bg-card shadow-sm"
-                    >
-                      <a
-                        href={item.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-400 hover:underline flex-grow mr-4 break-all"
-                      >
-                        {item.title || item.link}
-                      </a>
-                      <Button
-                        onClick={() => handleConvertLinkHtmlToJson(item.link)}
-                        disabled={convertingLink === item.link}
-                        className="mt-2 sm:mt-0 bg-purple-600 hover:bg-purple-700 text-white text-sm px-3 py-1 flex items-center gap-2"
-                      >
-                        {convertingLink === item.link && (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        )}
-                        {convertingLink === item.link
-                          ? "Converting..."
-                          : "Convert HTML to JSON"}
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </CardContent>
         </Card>
+        
+        <div className="w-full max-w-2xl mt-8">
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={handleLoadFiles} variant="outline" className="w-full">
+                View Saved Files
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Select a JSON file</DialogTitle>
+              </DialogHeader>
+              {loadingFiles ? (
+                <div className="flex items-center justify-center p-4">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <span>Loading files...</span>
+                </div>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {files.length > 0 ? (
+                    files.map((file) => (
+                      <li key={file} className="flex items-center justify-between">
+                        <span>{file}</span>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDeleteFile(file)}
+                          disabled={deletingFile === file}
+                        >
+                          {deletingFile === file ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            "Delete"
+                          )}
+                        </Button>
+                      </li>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground p-4 text-center">No files found.</p>
+                  )}
+                </ul>
+              )}
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <div className="w-full max-w-2xl mt-8">
+          <div className="bg-muted text-muted-foreground text-center p-2 rounded-t-lg">
+            parse category wise detailed page
+          </div>
+          <div className="grid grid-cols-6 bg-card border-x border-b rounded-b-lg">
+            <Link href="/latest-job" className="p-4 text-center hover:bg-muted transition-colors">Latest Job</Link>
+            <Link href="/admit-card" className="p-4 text-center hover:bg-muted transition-colors">Admit Card</Link>
+            <Link href="/answer-keys" className="p-4 text-center hover:bg-muted transition-colors">Answer Keys</Link>
+            <Link href="/results" className="p-4 text-center hover:bg-muted transition-colors">Results</Link>
+            <Link href="/admission" className="p-4 text-center hover:bg-muted transition-colors">Admission</Link>
+            <Link href="/other" className="p-4 text-center hover:bg-muted transition-colors">Other</Link>
+          </div>
+        </div>
+
         <p className="mt-8 text-muted-foreground text-sm">
           Powered by Next.js, Shadcn UI, and Gemini AI.
         </p>
       </main>
-
-      {/* Dialog for displaying converted HTML to JSON result */}
-      <Dialog open={showConvertedJsonDialog} onOpenChange={setShowConvertedJsonDialog}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Converted HTML to JSON</DialogTitle>
-          </DialogHeader>
-          <div className="max-h-[70vh] overflow-auto">
-            {convertedHtmlToJsonResult ? (
-              <Textarea
-                readOnly
-                value={convertedHtmlToJsonResult}
-                rows={20}
-                className="w-full bg-input border-border text-foreground font-mono resize-y min-h-[300px]"
-              />
-            ) : (
-              <p>No JSON data available.</p>
-            )}
-          </div>
-          <Button onClick={() => setShowConvertedJsonDialog(false)}>Close</Button>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -1,28 +1,22 @@
-import { NextResponse } from 'next/server';
-import fs from 'fs';
+import { NextRequest, NextResponse } from 'next/server';
+import fs from 'fs/promises';
 import path from 'path';
 
-export const dynamic = 'force-dynamic';
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const filename = searchParams.get('filename');
 
-export async function POST(request: Request) {
+  if (!filename) {
+    return NextResponse.json({ error: 'Filename is required' }, { status: 400 });
+  }
+
   try {
-    const body = await request.json();
-    const { fileName } = body;
-
-    if (!fileName) {
-      return NextResponse.json({ error: 'File name is required' }, { status: 400 });
-    }
-
-    const filePath = path.join(process.cwd(), 'json', fileName);
-
-    if (!fs.existsSync(filePath)) {
-      return NextResponse.json({ error: 'File not found' }, { status: 404 });
-    }
-
-    const fileContent = fs.readFileSync(filePath, 'utf-8');
-    return NextResponse.json({ content: fileContent });
+    const filePath = path.join(process.cwd(), 'json', 'details', 'jobDetailPage-json', filename);
+    const fileContent = await fs.readFile(filePath, 'utf-8');
+    const jsonContent = JSON.parse(fileContent);
+    return NextResponse.json(jsonContent);
   } catch (error) {
-    console.error('Error reading file:', error);
-    return NextResponse.json({ error: 'Failed to read file' }, { status: 500 });
+    console.error('Error reading JSON file:', error);
+    return NextResponse.json({ error: 'Failed to read JSON file.' }, { status: 500 });
   }
 }
